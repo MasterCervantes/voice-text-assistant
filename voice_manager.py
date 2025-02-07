@@ -49,6 +49,28 @@ class VoiceManager:
         if self.engine and text:
             self.voice_queue.put(text)
 
+    def set_voice(self, voice_id):
+        if self.engine and voice_id:
+            try:
+                self.engine.setProperty('voice', voice_id)
+                self.current_voice = voice_id
+            except Exception as e:
+                logging.error(f"Error setting voice: {e}")
+
+    def set_rate(self, rate):
+        if self.engine:
+            try:
+                self.engine.setProperty('rate', rate)
+            except Exception as e:
+                logging.error(f"Error setting rate: {e}")
+
+    def set_volume(self, volume):
+        if self.engine:
+            try:
+                self.engine.setProperty('volume', max(0.0, min(1.0, volume)))
+            except Exception as e:
+                logging.error(f"Error setting volume: {e}")
+
     def stop_speaking(self):
         if self.engine:
             try:
