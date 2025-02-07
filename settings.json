@@ -1,0 +1,15 @@
+{
+  "system_prompt": "You are a helpful assistant.",
+  "system_prompts": [
+    "You are a helpful assistant.",
+    "You are a friendly and knowledgeable AI assistant.",
+    "You are a professional assistant focused on providing clear and concise answers."
+  ],
+  "context_size": 10,
+  "temperature": 0.7,
+  "voice_settings": {
+    "rate": 175,
+    "volume": 1.0,
+    "pitch": 1.0
+  }
+}
