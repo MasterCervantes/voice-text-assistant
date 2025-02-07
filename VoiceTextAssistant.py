@@ -1,95 +1,65 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
-import requests
-import threading
-import json
-import os
-import subprocess
-import platform
-import pyttsx3
-from queue import Queue
-from functools import partial
-from voice_manager import VoiceManager
+    def change_voice(self, event=None):
+        if self.voice_combo.current() >= 0:
+            voice_id = self.voice_manager.available_voices[self.voice_combo.current()].id
+            self.voice_manager.set_voice(voice_id)
+            self.voice_manager.speak("Voice changed successfully")
 
-class VoiceTextAssistant:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Voice-Enabled Ollama Chat")
-        self.root.geometry("800x600")
-        self.root.minsize(600, 400)
+    def change_rate(self, event=None):
+        self.voice_manager.set_rate(self.rate_var.get())
+
+    def change_volume(self, event=None):
+        self.voice_manager.set_volume(self.volume_var.get())
+
+    def toggle_mute(self):
+        self.voice_manager.set_volume(0.0 if self.mute_var.get() else self.volume_var.get())
+
+    def create_menu(self):
+        self.menu_bar = tk.Menu(self.root)
+        self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.file_menu.add_command(label="New Conversation", command=self.new_conversation)
+        self.file_menu.add_command(label="Open Conversation", command=self.open_conversation)
+        self.file_menu.add_command(label="Save Conversation As", command=self.save_conversation_as)
+        self.file_menu.add_command(label="Set Save Folder", command=self.set_save_folder)
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="Clear Conversation", command=self.confirm_clear_conversation)
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="Exit", command=self.cleanup_and_exit)
+        self.menu_bar.add_cascade(label="File", menu=self.file_menu)
+
+        # Add Voice menu
+        self.voice_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.voice_menu.add_command(label="Voice Settings", command=self.show_voice_settings)
+        self.menu_bar.add_cascade(label="Voice", menu=self.voice_menu)
         
-        # Initialize voice manager
-        self.voice_manager = VoiceManager()
+        self.root.config(menu=self.menu_bar)
+
+    def show_voice_settings(self):
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("Voice Settings")
+        settings_window.geometry("400x300")
+        settings_window.transient(self.root)
         
-        self.message_queue = Queue()
-        self.current_conversation = None
-        self.conversation = []
-        self.displayed_message_indices = []
-        self.save_folder = "conversations"
+        ttk.Label(settings_window, text="Voice Settings", font=('Helvetica', 14, 'bold')).pack(pady=10)
         
-        self.setup_ui()
-        self.setup_bindings()
-        self.load_data()
-        self.check_ollama_status()
-        self.process_messages()
-
-    def setup_ui(self):
-        self.create_menu()
-        self.create_chat_interface()
-        self.create_status_bar()
-        self.create_voice_controls()
-
-    def create_voice_controls(self):
-        voice_frame = ttk.LabelFrame(self.root, text="Voice Controls")
-        voice_frame.pack(fill=tk.X, padx=5, pady=2)
-
-        # Voice selection
-        ttk.Label(voice_frame, text="Voice:").pack(side=tk.LEFT, padx=5)
-        self.voice_var = tk.StringVar()
-        self.voice_combo = ttk.Combobox(
-            voice_frame,
-            textvariable=self.voice_var,
-            values=[voice.name for voice in self.voice_manager.available_voices],
-            state='readonly',
-            width=30
+        # Add advanced voice settings
+        advanced_frame = ttk.LabelFrame(settings_window, text="Advanced Settings")
+        advanced_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Add pitch control
+        ttk.Label(advanced_frame, text="Pitch:").pack()
+        pitch_var = tk.DoubleVar(value=1.0)
+        pitch_scale = ttk.Scale(
+            advanced_frame,
+            from_=0.5,
+            to=2.0,
+            variable=pitch_var,
+            orient=tk.HORIZONTAL
         )
-        self.voice_combo.pack(side=tk.LEFT, padx=5)
-        self.voice_combo.bind('<<ComboboxSelected>>', self.change_voice)
-
-        # Speech rate control
-        ttk.Label(voice_frame, text="Rate:").pack(side=tk.LEFT, padx=5)
-        self.rate_var = tk.IntVar(value=175)
-        self.rate_scale = ttk.Scale(
-            voice_frame,
-            from_=100,
-            to=300,
-            variable=self.rate_var,
-            orient=tk.HORIZONTAL,
-            length=100,
-            command=self.change_rate
-        )
-        self.rate_scale.pack(side=tk.LEFT, padx=5)
-
-        # Volume control
-        ttk.Label(voice_frame, text="Volume:").pack(side=tk.LEFT, padx=5)
-        self.volume_var = tk.DoubleVar(value=1.0)
-        self.volume_scale = ttk.Scale(
-            voice_frame,
-            from_=0.0,
-            to=1.0,
-            variable=self.volume_var,
-            orient=tk.HORIZONTAL,
-            length=100,
-            command=self.change_volume
-        )
-        self.volume_scale.pack(side=tk.LEFT, padx=5)
-
-        # Mute toggle
-        self.mute_var = tk.BooleanVar(value=False)
-        self.mute_btn = ttk.Checkbutton(
-            voice_frame,
-            text="Mute",
-            variable=self.mute_var,
-            command=self.toggle_mute
-        )
-        self.mute_btn.pack(side=tk.LEFT, padx=5)
+        pitch_scale.pack(fill=tk.X, padx=5)
+        
+        # Add voice test button
+        ttk.Button(
+            settings_window,
+            text="Test Voice",
+            command=lambda: self.voice_manager.speak("This is a test of the current voice settings.")
+        ).pack(pady=10)
