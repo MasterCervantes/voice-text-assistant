@@ -1,92 +1,79 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
-import requests
-import threading
-import json
-import os
-import subprocess
-import platform
-import pyttsx3
-import logging
-import traceback
-from queue import Queue
-from functools import partial
-from voice_manager import VoiceManager
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='voice_assistant.log'
-)
-
-class OllamaChecker:
-    @staticmethod
-    def is_installed():
+    def update_display(self):
         try:
-            check_cmd = ['where', 'ollama'] if platform.system() == "Windows" else ['which', 'ollama']
-            return subprocess.run(check_cmd, capture_output=True).returncode == 0
-        except Exception:
-            return False
+            self.chat_display.config(state='normal')
+            self.chat_display.delete(1.0, tk.END)
+            context_size = self.settings.get('context_size', 10)
+            start_index = max(0, len(self.conversation) - context_size)
+            self.displayed_message_indices = list(range(start_index, len(self.conversation)))
 
-    @staticmethod
-    def is_running():
-        try:
-            return requests.get("http://localhost:11434/api/tags", timeout=5).status_code == 200
-        except requests.exceptions.RequestException:
-            return False
-    
-    @staticmethod
-    def get_available_models():
-        try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=5)
-            if response.status_code == 200 and 'models' in response.json():
-                return [model['name'] for model in response.json()['models']]
-            return []
-        except requests.exceptions.RequestException:
-            return []
+            for idx in self.displayed_message_indices:
+                msg = self.conversation[idx]
+                prefix = "You: " if msg['role'] == 'user' else "Assistant: "
+                tag_name = f"msg_{idx}"
+                self.chat_display.insert(tk.END, f"{prefix}{msg['content']}\n\n", tag_name)
+                self.chat_display.tag_config(tag_name, background='white')
 
-class VoiceTextAssistant:
-    def __init__(self, root):
-        try:
-            logging.info("Initializing VoiceTextAssistant")
-            self.root = root
-            self.root.title("Voice-Enabled Ollama Chat")
-            self.root.geometry("800x600")
-            self.root.minsize(600, 400)
-            
-            # Initialize voice manager
-            logging.info("Initializing voice manager")
-            self.voice_manager = VoiceManager()
-            
-            self.message_queue = Queue()
-            self.current_conversation = None
-            self.conversation = []
-            self.displayed_message_indices = []
-            self.save_folder = "conversations"
-            self.settings = {}  # Initialize settings dictionary
-            
-            logging.info("Setting up UI")
-            self.setup_ui()
-            self.setup_bindings()
-            self.load_data()
-            self.check_ollama_status()
-            self.process_messages()
-            logging.info("Initialization complete")
+            self.chat_display.config(state='disabled')
+            self.chat_display.see(tk.END)
+            self.memory_label.config(text=f"Messages: {len(self.conversation)}")
         except Exception as e:
-            logging.error(f"Error during initialization: {str(e)}")
+            logging.error(f"Error in update_display: {str(e)}")
             logging.error(traceback.format_exc())
-            messagebox.showerror("Initialization Error", f"Error initializing application: {str(e)}")
-            raise
 
-    def setup_ui(self):
+    def load_data(self):
         try:
-            logging.info("Setting up UI components")
-            self.create_menu()
-            self.create_chat_interface()
-            self.create_status_bar()
-            self.create_voice_controls()
+            self.settings = self.load_settings()
+            system_prompts = self.settings.get("system_prompts", ["You are a helpful assistant."])
+            self.system_prompt_combo['values'] = system_prompts
+            self.system_prompt_combo.set(self.settings.get("system_prompt", "You are a helpful assistant."))
         except Exception as e:
-            logging.error(f"Error in setup_ui: {str(e)}")
+            logging.error(f"Error in load_data: {str(e)}")
             logging.error(traceback.format_exc())
-            raise
+
+    def load_settings(self):
+        try:
+            if os.path.exists('settings.json'):
+                with open('settings.json', 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading settings: {str(e)}")
+            logging.error(traceback.format_exc())
+        return {}
+
+    def setup_bindings(self):
+        try:
+            self.input_field.bind("<Return>", lambda e: self.queue_message())
+            self.root.bind("<Control-s>", lambda e: self.save_conversation_as())
+            self.chat_display.bind("<Button-3>", self.show_context_menu)
+            self.chat_display.bind("<Button-2>", self.show_context_menu)  # For macOS
+        except Exception as e:
+            logging.error(f"Error in setup_bindings: {str(e)}")
+            logging.error(traceback.format_exc())
+
+    def show_context_menu(self, event):
+        try:
+            menu = tk.Menu(self.root, tearoff=0)
+            menu.add_command(label="Copy", command=lambda: self.chat_display.event_generate('<<Copy>>'))
+            menu.tk_popup(event.x_root, event.y_root)
+        except Exception as e:
+            logging.error(f"Error in show_context_menu: {str(e)}")
+            logging.error(traceback.format_exc())
+
+    def cleanup_and_exit(self):
+        try:
+            logging.info("Cleaning up and exiting")
+            self.voice_manager.cleanup()
+            self.root.quit()
+        except Exception as e:
+            logging.error(f"Error in cleanup_and_exit: {str(e)}")
+            logging.error(traceback.format_exc())
+
+if __name__ == "__main__":
+    try:
+        root = tk.Tk()
+        app = VoiceTextAssistant(root)
+        root.mainloop()
+    except Exception as e:
+        logging.error(f"Main execution error: {str(e)}")
+        logging.error(traceback.format_exc())
+        messagebox.showerror("Error", f"Application error: {str(e)}")
