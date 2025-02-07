@@ -1,96 +1,129 @@
-    def create_chat_interface(self):
-        self.chat_frame = ttk.Frame(self.root)
-        self.chat_frame.pack(expand=True, fill='both', padx=5, pady=5)
+    def update_display(self):
+        self.chat_display.config(state='normal')
+        self.chat_display.delete(1.0, tk.END)
+        context_size = self.settings.get('context_size', 10)
+        start_index = max(0, len(self.conversation) - context_size)
+        self.displayed_message_indices = list(range(start_index, len(self.conversation)))
 
-        self.chat_display = tk.Text(self.chat_frame, wrap=tk.WORD, state='disabled')
-        self.chat_display.pack(expand=True, fill='both')
+        for idx in self.displayed_message_indices:
+            msg = self.conversation[idx]
+            prefix = "You: " if msg['role'] == 'user' else "Assistant: "
+            tag_name = f"msg_{idx}"
+            self.chat_display.insert(tk.END, f"{prefix}{msg['content']}\n\n", tag_name)
+            self.chat_display.tag_config(tag_name, background='white')
 
-        self.scrollbar = ttk.Scrollbar(self.chat_display, command=self.chat_display.yview)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.chat_display.config(yscrollcommand=self.scrollbar.set)
+        self.chat_display.config(state='disabled')
+        self.chat_display.see(tk.END)
+        self.memory_label.config(text=f"Messages: {len(self.conversation)}")
 
-        self.input_frame = ttk.Frame(self.root)
-        self.input_frame.pack(fill=tk.X, padx=5, pady=5)
-        self.input_field = ttk.Entry(self.input_frame)
-        self.input_field.pack(side=tk.LEFT, expand=True, fill=tk.X)
-        self.send_btn = ttk.Button(self.input_frame, text="Send", command=self.queue_message)
-        self.send_btn.pack(side=tk.LEFT, padx=5)
+    def load_data(self):
+        self.settings = self.load_settings()
+        system_prompts = self.settings.get("system_prompts", ["You are a helpful assistant."])
+        self.system_prompt_combo['values'] = system_prompts
+        self.system_prompt_combo.set(self.settings.get("system_prompt", "You are a helpful assistant."))
 
-    def create_status_bar(self):
-        self.status_bar = ttk.Frame(self.root)
-        self.status_bar.pack(fill=tk.X, padx=5, pady=2)
-
-        self.memory_label = ttk.Label(self.status_bar, text="Messages: 0")
-        self.memory_label.pack(side=tk.LEFT)
-
-        self.system_prompt_var = tk.StringVar()
-        self.system_prompt_combo = ttk.Combobox(
-            self.status_bar, 
-            textvariable=self.system_prompt_var, 
-            state='normal',
-            width=40
-        )
-        self.system_prompt_combo.pack(side=tk.LEFT, padx=10)
-        self.system_prompt_combo.bind("<<ComboboxSelected>>", self.update_system_prompt)
-
-        self.available_models = OllamaChecker.get_available_models()
-        self.selected_model_var = tk.StringVar()
-        self.model_combo = ttk.Combobox(
-            self.status_bar,
-            textvariable=self.selected_model_var,
-            values=self.available_models,
-            state='readonly',
-            width=30
-        )
-        self.model_combo.pack(side=tk.LEFT, padx=10)
-
-        self.status_label = ttk.Label(self.status_bar, text="● Connected")
-        self.status_label.pack(side=tk.RIGHT)
-
-    def get_ai_response(self):
+    def load_settings(self):
         try:
-            active_model = self.selected_model_var.get()
-            if not active_model:
-                self.show_error("No model selected!")
+            if os.path.exists('settings.json'):
+                with open('settings.json', 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+        return {}
+
+    def handle_api_error(self, response):
+        if self.conversation[-1]['content'] == "":
+            del self.conversation[-1]
+        self.show_error(f"API Error: {response.status_code}")
+
+    def handle_response_error(self, error):
+        if self.conversation and self.conversation[-1]['content'] == "":
+            del self.conversation[-1]
+        self.show_error(str(error))
+        self.root.after(0, self.update_display)
+
+    def show_error(self, message):
+        self.root.after(0, messagebox.showerror, "Error", message)
+
+    def new_conversation(self):
+        if self.conversation and messagebox.askyesno("New Conversation", "Save current conversation?"):
+            self.save_history()
+        self.conversation = []
+        self.current_conversation = None
+        self.update_display()
+
+    def save_conversation_as(self):
+        if name := simpledialog.askstring("Save As", "Enter conversation name:"):
+            self.current_conversation = name
+            self.save_history()
+
+    def open_conversation(self):
+        filepath = filedialog.askopenfilename(
+            initialdir=self.save_folder,
+            title="Open Conversation",
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*"))
+        )
+        if filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    self.conversation = json.load(f)
+                self.current_conversation = os.path.splitext(os.path.basename(filepath))[0]
+                self.update_display()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load conversation: {e}")
+
+    def confirm_clear_conversation(self):
+        if messagebox.askyesno("Confirm Clear", "Are you sure you want to clear the current conversation?"):
+            self.conversation = []
+            self.save_history()
+            self.update_display()
+
+    def save_history(self):
+        try:
+            if not hasattr(self, 'current_conversation') or not self.current_conversation:
+                self.save_conversation_as()
                 return
 
-            context = self.conversation[-self.settings.get('context_size', 10):]
-            messages = [{"role": "system", "content": self.settings.get('system_prompt', '')}]
-            messages.extend(context)
-
-            self.conversation.append({"role": "assistant", "content": ""})
-            self.root.after(0, self.update_display)
-
-            with requests.post(
-                "http://localhost:11434/api/chat",
-                json={
-                    "model": active_model,
-                    "messages": messages,
-                    "stream": True,
-                    "temperature": self.settings.get('temperature', 0.7)
-                },
-                stream=True,
-                timeout=30
-            ) as response:
-
-                if response.status_code == 200:
-                    complete_response = ""
-                    for line in response.iter_lines():
-                        if line:
-                            try:
-                                data = json.loads(line)
-                                if content := data.get('message', {}).get('content'):
-                                    complete_response += content
-                                    self.conversation[-1]['content'] = complete_response
-                                    self.root.after(0, self.update_display)
-                            except json.JSONDecodeError:
-                                continue
-                    
-                    # Speak the complete response
-                    self.voice_manager.speak(complete_response)
-                    self.save_history()
-                else:
-                    self.handle_api_error(response)
-
+            os.makedirs(self.save_folder, exist_ok=True)
+            filepath = os.path.join(self.save_folder, f"{self.current_conversation}.json")
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.conversation, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            self.handle_response_error(e)
+            print(f"Error saving history: {e}")
+
+    def update_system_prompt(self, event=None):
+        if new_prompt := self.system_prompt_var.get():
+            self.settings['system_prompt'] = new_prompt
+            if new_prompt not in self.system_prompt_combo['values']:
+                if messagebox.askyesno("New Prompt", "Save this as a new system prompt?"):
+                    self.settings.setdefault("system_prompts", []).append(new_prompt)
+                    self.system_prompt_combo['values'] = self.settings["system_prompts"]
+            try:
+                with open('settings.json', 'w') as f:
+                    json.dump(self.settings, f, indent=2)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save settings: {e}")
+
+    def setup_bindings(self):
+        self.input_field.bind("<Return>", lambda e: self.queue_message())
+        self.root.bind("<Control-s>", lambda e: self.save_conversation_as())
+        self.chat_display.bind("<Button-3>", self.show_context_menu)
+        self.chat_display.bind("<Button-2>", self.show_context_menu)  # For macOS
+
+    def check_ollama_status(self):
+        status = OllamaChecker.is_running()
+        self.status_label.config(
+            text="● Connected" if status else "○ Disconnected",
+            foreground="green" if status else "red"
+        )
+        self.root.after(10000, self.check_ollama_status)
+
+    def cleanup_and_exit(self):
+        """Clean up resources and exit"""
+        self.voice_manager.cleanup()
+        self.root.quit()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = VoiceTextAssistant(root)
+    root.mainloop()
