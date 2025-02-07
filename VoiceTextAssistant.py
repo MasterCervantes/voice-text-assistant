@@ -1,1 +1,27 @@
-aW1wb3J0IHRraW50ZXIgYXMgdGsKZnJvbSB0a2ludGVyIGltcG9ydCB0dGssIG1lc3NhZ2Vib3gsIHNpbXBsZWRpYWxvZywgZmlsZWRpYWxvZwppbXBvcnQgcmVxdWVzdHMKaW1wb3J0IHRocmVhZGluZwppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHN1YnByb2Nlc3MKaW1wb3J0IHBsYXRmb3JtCmltcG9ydCBweXR0c3gzCmZyb20gcXVldWUgaW1wb3J0IFF1ZXVlCmZyb20gZnVuY3Rvb2xzIGltcG9ydCBwYXJ0aWFsCgpjbGFzcyBPbGxhbWFDaGVja2VyOgogICAgQHN0YXRpY21ldGhvZAogICAgZGVmIGlzX2luc3RhbGxlZCgpOgogICAgICAgIHRyeToKICAgICAgICAgICAgY2hlY2tfY21kID0gWyd3aGVyZScsICdvbGxhbWEnXSBpZiBwbGF0Zm9ybS5zeXN0ZW0oKSA9PSAiV2luZG93cyIgZWxzZSBbJ3doaWNoJywgJ29sbGFtYSddCiAgICAgICAgICAgIHJldHVybiBzdWJwcm9jZXNzLnJ1bihjaGVja19jbWQsIGNhcHR1cmVfb3V0cHV0PVRydWUpLnJldHVybmNvZGUgPT0gMAogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgIHJldHVybiBGYWxzZQoKICAgIEBzdGF0aWNtZXRob2QKICAgIGRlZiBpc19ydW5uaW5nKCk6CiAgICAgICAgdHJ5OgogICAgICAgICAgICByZXR1cm4gcmVxdWVzdHMuZ2V0KCJodHRwOi8vbG9jYWxob3N0OjExNDM0L2FwaS90YWdzIiwgdGltZW91dD01KS5zdGF0dXNfY29kZSA9PSAyMDAKICAgICAgICBleGNlcHQgcmVxdWVzdHMuZXhjZXB0aW9ucy5SZXF1ZXN0RXhjZXB0aW9uOgogICAgICAgICAgICByZXR1cm4gRmFsc2UKICAgIAogICAgQHN0YXRpY21ldGhvZAogICAgZGVmIGdldF9hdmFpbGFibGVfbW9kZWxzKCk6CiAgICAgICAgdHJ5OgogICAgICAgICAgICByZXNwb25zZSA9IHJlcXVlc3RzLmdldCgiaHR0cDovL2xvY2FsaG9zdDoxMTQzNC9hcGkvdGFncyIsIHRpbWVvdXQ9NSkKICAgICAgICAgICAgaWYgcmVzcG9uc2Uuc3RhdHVzX2NvZGUgPT0gMjAwIGFuZCAnbW9kZWxzJyBpbiByZXNwb25zZS5qc29uKCk6CiAgICAgICAgICAgICAgICByZXR1cm4gW21vZGVsWyduYW1lJ10gZm9yIG1vZGVsIGluIHJlc3BvbnNlLmpzb24oKVsnbW9kZWxzJ11dCiAgICAgICAgICAgIHJldHVybiBbXQogICAgICAgIGV4Y2VwdCByZXF1ZXN0cy5leGNlcHRpb25zLlJlcXVlc3RFeGNlcHRpb246CiAgICAgICAgICAgIHJldHVybiBbXQo=
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog, filedialog
+import requests
+import threading
+import json
+import os
+import subprocess
+import platform
+import pyttsx3
+from queue import Queue
+from functools import partial
+
+class OllamaChecker:
+    @staticmethod
+    def is_installed():
+        try:
+            check_cmd = ['where', 'ollama'] if platform.system() == "Windows" else ['which', 'ollama']
+            return subprocess.run(check_cmd, capture_output=True).returncode == 0
+        except Exception:
+            return False
+
+    @staticmethod
+    def is_running():
+        try:
+            return requests.get("http://localhost:11434/api/tags", timeout=5).status_code == 200
+        except requests.exceptions.RequestException:
+            return False
